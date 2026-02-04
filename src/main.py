@@ -1,6 +1,7 @@
 """
 High-Dividend Hunter: Yahoo!ファイナンス 配当利回りランキングのスクレイピングロジック
 """
+import re
 import time
 import requests
 from bs4 import BeautifulSoup
@@ -250,20 +251,45 @@ def _parse_yield_value(s: str) -> float | None:
         return None
 
 
+# 市場名らしいパターン（東証PRM, 東証STD, 名証, マザーズ 等）
+_MARKET_PATTERN = re.compile(
+    r"(東証(?:PRM|STD|グロース)?|名証(?:MN)?|マザーズ|札証|福証|JQS|東証)"
+)
+
+
 def _extract_market_from_name_cell(s: str) -> str:
-    """名称・コード・市場セルから市場部分（末尾のトークン）を返す。"""
+    """名称・コード・市場セルから市場部分を返す。末尾トークンまたは既知パターンで抽出。"""
     if not s or not isinstance(s, str):
         return ""
+    s = s.strip()
+    # 1) 末尾のトークン（スペース区切り）
     parts = s.split()
+    if parts:
+        last = parts[-1].strip()
+        if last and (last.startswith("東証") or last.startswith("名証") or "証" in last or last in ("マザーズ", "JQS")):
+            return last
+    # 2) 既知の市場パターンを文中から検索
+    m = _MARKET_PATTERN.search(s)
+    if m:
+        return m.group(1)
     return parts[-1].strip() if parts else ""
 
 
 def get_unique_markets(df: pd.DataFrame) -> list[str]:
-    """DataFrame の名称・コード・市場列から市場の一覧を返す。"""
+    """DataFrame の名称・コード・市場列（または市場を含む列）から市場の一覧を返す。"""
+    cand_columns = []
     for c in df.columns:
-        if "名称" in str(c) and "コード" in str(c) and "市場" in str(c):
-            markets = df[c].astype(str).map(_extract_market_from_name_cell).dropna()
-            return sorted(markets.unique().tolist())
+        col = str(c)
+        if "名称" in col and "コード" in col and "市場" in col:
+            cand_columns.insert(0, c)  # 優先
+        elif "市場" in col or "名称" in col:
+            cand_columns.append(c)
+    for c in cand_columns:
+        extracted = df[c].astype(str).map(_extract_market_from_name_cell)
+        markets = extracted.replace("", pd.NA).dropna().unique().tolist()
+        markets = [x for x in markets if x and len(x) <= 20]
+        if markets:
+            return sorted(markets)
     return []
 
 

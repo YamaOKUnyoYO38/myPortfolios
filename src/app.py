@@ -277,11 +277,19 @@ if df is not None and not df.empty:
         if scope_label == "各市場ごとの全銘柄":
             market_options = get_unique_markets(df)
             if market_options:
-                selected_markets = st.multiselect("市場を選択", options=market_options, default=[], key="markets_filter")
+                selected_markets = st.multiselect(
+                    "市場を選択（複数可）",
+                    options=market_options,
+                    default=[],
+                    key="markets_filter",
+                    help="選択した市場の銘柄だけに絞り込まれます。",
+                )
                 if selected_markets:
                     markets_filter = selected_markets
+                else:
+                    st.caption("※1つ以上選択すると絞り込みがかかります。")
             else:
-                st.caption("取得データから市場を抽出します。")
+                st.caption("取得データから市場を抽出しています。データに「名称・コード・市場」列が含まれていれば、ここに市場一覧が表示されます。")
         yield_min = st.number_input("配当利回り 最小（%）", value=None, min_value=0.0, max_value=100.0, step=0.1, key="y_min", placeholder="指定なし")
         yield_max = st.number_input("配当利回り 最大（%）", value=None, min_value=0.0, max_value=100.0, step=0.1, key="y_max", placeholder="指定なし")
         col_settlement = None
