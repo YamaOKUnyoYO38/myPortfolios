@@ -139,6 +139,31 @@ if st.session_state["main_page"] == "my_portfolio":
     portfolios = load_portfolios()
     st.write("---")
     st.write("**作成済みポートフォリオ**")
+    # ソート機能（修正3）: 作成日時 / 閲覧回数 / 銘柄数 の昇順・降順
+    sort_option = st.selectbox(
+        "並び替え",
+        options=[
+            "作成日時（新しい順）",
+            "作成日時（古い順）",
+            "閲覧回数（多い順）",
+            "閲覧回数（少ない順）",
+            "銘柄数（多い順）",
+            "銘柄数（少ない順）",
+        ],
+        key="mp_sort",
+    )
+    if sort_option == "作成日時（新しい順）":
+        portfolios = sorted(portfolios, key=lambda x: x.get("created_at", ""), reverse=True)
+    elif sort_option == "作成日時（古い順）":
+        portfolios = sorted(portfolios, key=lambda x: x.get("created_at", ""))
+    elif sort_option == "閲覧回数（多い順）":
+        portfolios = sorted(portfolios, key=lambda x: x.get("view_count", 0), reverse=True)
+    elif sort_option == "閲覧回数（少ない順）":
+        portfolios = sorted(portfolios, key=lambda x: x.get("view_count", 0))
+    elif sort_option == "銘柄数（多い順）":
+        portfolios = sorted(portfolios, key=lambda x: len(x.get("symbols") or []), reverse=True)
+    else:
+        portfolios = sorted(portfolios, key=lambda x: len(x.get("symbols") or []))
     for p in portfolios:
         name = p.get("name", "")
         pid = p.get("id", "")
