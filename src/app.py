@@ -9,6 +9,7 @@ from main import (
     get_url_by_site_name,
     apply_ranking_filters,
 )
+from portfolio_data import load_portfolios, save_portfolios, create_portfolio, update_portfolio, delete_portfolio
 
 RESULT_LIMIT_MIN, RESULT_LIMIT_MAX = 1, 999
 DEFAULT_LIMIT = 50
@@ -18,6 +19,46 @@ st.set_page_config(
     page_icon="📈",
     layout="wide",
 )
+
+page = st.sidebar.radio(
+    "ページ",
+    ["ランキング取得", "ポートフォリオ"],
+    label_visibility="collapsed",
+)
+st.sidebar.caption("High-Dividend Hunter")
+
+if page == "ポートフォリオ":
+    st.title("📋 ポートフォリオ")
+    st.caption("リストの作成・編集・削除ができます。")
+    portfolios = load_portfolios()
+    with st.form("new_portfolio_form"):
+        new_name = st.text_input("新規リスト名", placeholder="例: 高配当候補")
+        if st.form_submit_button("作成"):
+            if new_name and new_name.strip():
+                create_portfolio(new_name.strip())
+                st.success(f"「{new_name.strip()}」を作成しました。")
+                st.rerun()
+            else:
+                st.error("リスト名を入力してください。")
+    st.divider()
+    for p in portfolios:
+        pid, name, symbols = p.get("id"), p.get("name", ""), p.get("symbols") or []
+        with st.expander(f"📁 {name}（{len(symbols)} 件）", expanded=False):
+            edited = st.text_input("リスト名を編集", value=name, key=f"edit_{pid}")
+            col1, col2, _ = st.columns([1, 1, 2])
+            with col1:
+                if st.button("保存", key=f"save_{pid}"):
+                    update_portfolio(pid, name=edited)
+                    st.rerun()
+            with col2:
+                if st.button("削除", key=f"del_{pid}"):
+                    delete_portfolio(pid)
+                    st.rerun()
+            if symbols:
+                st.write("登録銘柄:", ", ".join(symbols))
+            else:
+                st.caption("銘柄はランキング取得ページで「リストに保存」から追加できます。")
+    st.stop()
 
 st.title("📈 High-Dividend Hunter")
 st.caption("Yahoo!ファイナンス 配当利回りランキングを取得し、テーブル表示・CSVダウンロードができます。")

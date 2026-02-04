@@ -48,6 +48,9 @@ Desktop.ini
 # Streamlit
 .streamlit/secrets.toml
 
+# App data (portfolios etc.)
+data/
+
 # Jupyter
 .ipynb_checkpoints/
 
