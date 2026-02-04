@@ -10,6 +10,7 @@ from main import (
     apply_ranking_filters,
     search_site_candidates,
     NAMED_SITES,
+    get_unique_markets,
 )
 from portfolio_data import (
     load_portfolios,
@@ -20,7 +21,7 @@ from portfolio_data import (
     increment_view_count,
 )
 
-RESULT_LIMIT_MIN, RESULT_LIMIT_MAX = 1, 999
+RESULT_LIMIT_MIN, RESULT_LIMIT_MAX = 1, 9999
 DEFAULT_LIMIT = 50
 
 st.set_page_config(
@@ -218,7 +219,7 @@ else:
     target_url = url.strip() or None
 
 fetch_all_pages = st.checkbox(
-    "公開されている全ページを取得する（ページネーションで最大999件）",
+    "公開されている全ページを取得する（ページネーションで最大9999件）",
     value=False,
     key="fetch_all_pages",
 )
@@ -248,6 +249,16 @@ if df is not None and not df.empty:
     st.success(f"表示件数: {len(df)} 件（条件により絞り込み可）")
 
     with st.expander("条件で絞り込み", expanded=False):
+        scope_label = st.radio("対象", ["上場銘柄すべて", "各市場ごとの全銘柄"], horizontal=True, key="scope_radio")
+        markets_filter = None
+        if scope_label == "各市場ごとの全銘柄":
+            market_options = get_unique_markets(df)
+            if market_options:
+                selected_markets = st.multiselect("市場を選択", options=market_options, default=[], key="markets_filter")
+                if selected_markets:
+                    markets_filter = selected_markets
+            else:
+                st.caption("取得データから市場を抽出します。")
         yield_min = st.number_input("配当利回り 最小（%）", value=None, min_value=0.0, max_value=100.0, step=0.1, key="y_min", placeholder="指定なし")
         yield_max = st.number_input("配当利回り 最大（%）", value=None, min_value=0.0, max_value=100.0, step=0.1, key="y_max", placeholder="指定なし")
         col_settlement = None
@@ -292,6 +303,7 @@ if df is not None and not df.empty:
         industry=industry or None,
         sector=sector or None,
         has_shareholder_benefit=has_benefit,
+        markets=markets_filter,
     )
     # 修正7: オプションでソート
     sort_spec = st.session_state.get("ranking_sort")

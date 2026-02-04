@@ -157,12 +157,12 @@ def hunt_high_dividend(url: str | None = None, limit: int | None = None) -> pd.D
 
     Args:
         url: 取得先URL。Noneの場合はDEFAULT_URLを使用し、失敗時はFALLBACK_URLを試行。
-        limit: 取得件数（1〜999）。None の場合は1ページ分（最大50件程度）のみ取得。
+        limit: 取得件数（1〜9999）。None の場合は1ページ分（最大50件程度）のみ取得。
 
     Returns:
         ランキングデータのDataFrame。取得失敗時は空のDataFrameを返す。
     """
-    if limit is not None and (limit < 1 or limit > 999):
+    if limit is not None and (limit < 1 or limit > 9999):
         return pd.DataFrame()
 
     target_url = url or DEFAULT_URL
@@ -216,6 +216,23 @@ def _parse_yield_value(s: str) -> float | None:
         return None
 
 
+def _extract_market_from_name_cell(s: str) -> str:
+    """名称・コード・市場セルから市場部分（末尾のトークン）を返す。"""
+    if not s or not isinstance(s, str):
+        return ""
+    parts = s.split()
+    return parts[-1].strip() if parts else ""
+
+
+def get_unique_markets(df: pd.DataFrame) -> list[str]:
+    """DataFrame の名称・コード・市場列から市場の一覧を返す。"""
+    for c in df.columns:
+        if "名称" in str(c) and "コード" in str(c) and "市場" in str(c):
+            markets = df[c].astype(str).map(_extract_market_from_name_cell).dropna()
+            return sorted(markets.unique().tolist())
+    return []
+
+
 def apply_ranking_filters(
     df: pd.DataFrame,
     yield_min: float | None = None,
@@ -224,6 +241,7 @@ def apply_ranking_filters(
     industry: list[str] | None = None,
     sector: list[str] | None = None,
     has_shareholder_benefit: bool | None = None,
+    markets: list[str] | None = None,
 ) -> pd.DataFrame:
     """
     取得済みランキング DataFrame に条件をかけて絞り込む。
@@ -231,8 +249,9 @@ def apply_ranking_filters(
     Args:
         df: ランキングデータ
         yield_min / yield_max: 配当利回り（%）の範囲。None は制限なし。
-        settlement_months: 決算年月で絞り込み（例: ['2026/03', '2025/12']）。None は制限なし。
-        industry / sector / has_shareholder_benefit: 列が存在する場合に適用。現行取得データには含まれない場合あり。
+        settlement_months: 決算年月で絞り込み。None は制限なし。
+        industry / sector / has_shareholder_benefit: 列が存在する場合に適用。
+        markets: 市場で絞り込み（例: ['東証PRM', '東証STD']）。None は制限なし（上場銘柄すべて）。
     """
     if df.empty:
         return df
@@ -282,5 +301,16 @@ def apply_ranking_filters(
             elif has_shareholder_benefit is False:
                 out = out[~out[c].astype(str).str.strip().str.lower().isin(("あり", "1", "true", "yes"))]
             break
+
+    # 市場（各市場ごとの全銘柄: 指定した市場のみ表示）
+    col_name_market = None
+    for c in out.columns:
+        if "名称" in str(c) and "コード" in str(c) and "市場" in str(c):
+            col_name_market = c
+            break
+    if col_name_market and markets:
+        out["_market"] = out[col_name_market].astype(str).map(_extract_market_from_name_cell)
+        out = out[out["_market"].isin(markets)]
+        out = out.drop(columns=["_market"])
 
     return out.reset_index(drop=True)
