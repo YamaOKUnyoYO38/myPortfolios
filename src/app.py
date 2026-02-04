@@ -2,7 +2,7 @@
 High-Dividend Hunter: Streamlit Web UI
 """
 import streamlit as st
-from main import hunt_high_dividend, DEFAULT_URL
+from main import hunt_high_dividend, DEFAULT_URL, get_site_names, get_url_by_site_name
 
 RESULT_LIMIT_MIN, RESULT_LIMIT_MAX = 1, 999
 DEFAULT_LIMIT = 50
@@ -16,12 +16,29 @@ st.set_page_config(
 st.title("📈 High-Dividend Hunter")
 st.caption("Yahoo!ファイナンス 配当利回りランキングを取得し、テーブル表示・CSVダウンロードができます。")
 
-url = st.text_input(
-    "ランキングURL（未入力の場合はデフォルトを使用）",
-    value="",
-    placeholder=DEFAULT_URL,
+input_mode = st.radio(
+    "取得方法",
+    options=["サイト名で選ぶ", "URLを直接入力"],
+    horizontal=True,
 )
-target_url = url.strip() or None
+
+target_url = None
+if input_mode == "サイト名で選ぶ":
+    site_names = get_site_names()
+    selected = st.selectbox(
+        "サイト名",
+        options=site_names,
+        index=0,
+        help="登録済みのサイトから選択すると、対応するURLで取得します。",
+    )
+    target_url = get_url_by_site_name(selected)
+else:
+    url = st.text_input(
+        "ランキングURL（未入力の場合はデフォルトを使用）",
+        value="",
+        placeholder=DEFAULT_URL,
+    )
+    target_url = url.strip() or None
 
 limit = st.number_input(
     "取得件数",

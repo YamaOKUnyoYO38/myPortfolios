@@ -11,6 +11,28 @@ import pandas as pd
 DEFAULT_URL = "https://finance.yahoo.co.jp/stocks/ranking/dividendYield?market=all"
 FALLBACK_URL = "https://finance.yahoo.co.jp/ranking/dividendYield"
 
+# サイト名 → URL の登録リスト（サイト名でランキング取得用）
+NAMED_SITES: list[tuple[str, str]] = [
+    ("Yahoo!ファイナンス 配当利回り（会社予想）", DEFAULT_URL),
+    ("Yahoo!ファイナンス 配当利回り（旧URL）", FALLBACK_URL),
+    ("Yahoo!ファイナンス 株主優待配当利回り（2月）", "https://finance.yahoo.co.jp/stocks/incentive/dividendYield-ranking/month_2"),
+    ("Yahoo!ファイナンス 株主優待配当利回り（3月）", "https://finance.yahoo.co.jp/stocks/incentive/dividendYield-ranking/month_3"),
+    ("Yahoo!ファイナンス 優良高配当株", "https://finance.yahoo.co.jp/stocks/screening/highdividend"),
+]
+
+
+def get_site_names() -> list[str]:
+    """登録済みサイト名のリストを返す。"""
+    return [name for name, _ in NAMED_SITES]
+
+
+def get_url_by_site_name(site_name: str) -> str | None:
+    """サイト名に対応するURLを返す。見つからなければ None。"""
+    for name, url in NAMED_SITES:
+        if name == site_name:
+            return url
+    return None
+
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
