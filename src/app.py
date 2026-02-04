@@ -26,15 +26,27 @@ st.set_page_config(
     layout="wide",
 )
 
-page = st.sidebar.radio(
-    "ページ",
-    ["ランキング取得", "ポートフォリオ"],
-    label_visibility="collapsed",
-)
-st.sidebar.caption("High-Dividend Hunter")
+# メニューバー用: デフォルトはランキングを取得
+if "main_page" not in st.session_state:
+    st.session_state["main_page"] = "ranking"
 
-if page == "ポートフォリオ":
-    st.title("📋 ポートフォリオ")
+st.title("📈 High-Dividend Hunter")
+col_m1, col_m2, col_m3, _ = st.columns([2, 2, 2, 10])
+with col_m1:
+    if st.button("ランキングを取得", use_container_width=True):
+        st.session_state["main_page"] = "ranking"
+        st.rerun()
+with col_m2:
+    if st.button("ポートフォリオを作成", use_container_width=True):
+        st.session_state["main_page"] = "portfolio_create"
+        st.rerun()
+with col_m3:
+    if st.button("My Portfolio", use_container_width=True):
+        st.session_state["main_page"] = "my_portfolio"
+        st.rerun()
+st.divider()
+
+if st.session_state["main_page"] == "portfolio_create":
     st.caption("リストの作成・編集・削除ができます。")
     portfolios = load_portfolios()
     with st.form("new_portfolio_form"):
@@ -63,10 +75,14 @@ if page == "ポートフォリオ":
             if symbols:
                 st.write("登録銘柄:", ", ".join(symbols))
             else:
-                st.caption("銘柄はランキング取得ページで「リストに保存」から追加できます。")
+                st.caption("銘柄はランキング取得ページのオプションから追加できます。")
     st.stop()
 
-st.title("📈 High-Dividend Hunter")
+if st.session_state["main_page"] == "my_portfolio":
+    st.caption("My Portfolio：新規作成またはポートフォリオを参照できます。")
+    st.stop()
+
+# ランキングを取得ページ
 st.caption("Yahoo!ファイナンス 配当利回りランキングを取得し、テーブル表示・CSVダウンロードができます。")
 
 input_mode = st.radio(
