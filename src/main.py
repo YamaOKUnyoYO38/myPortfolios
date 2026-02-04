@@ -33,6 +33,21 @@ def get_url_by_site_name(site_name: str) -> str | None:
             return url
     return None
 
+
+def search_site_candidates(query: str, max_results: int = 15) -> list[tuple[str, str]]:
+    """入力内容でネット検索し、(タイトル, URL) の候補リストを返す。ヒット範囲拡大用。"""
+    if not query or not query.strip():
+        return []
+    try:
+        from duckduckgo_search import DDGS
+
+        with DDGS() as ddgs:
+            results = list(ddgs.text(query.strip(), max_results=max_results))
+        return [(r.get("title", ""), r.get("href", "")) for r in results if r.get("href")]
+    except Exception:
+        return []
+
+
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",

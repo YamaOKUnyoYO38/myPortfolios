@@ -8,6 +8,8 @@ from main import (
     get_site_names,
     get_url_by_site_name,
     apply_ranking_filters,
+    search_site_candidates,
+    NAMED_SITES,
 )
 from portfolio_data import (
     load_portfolios,
@@ -186,14 +188,27 @@ input_mode = st.radio(
 
 target_url = None
 if input_mode == "サイト名で選ぶ":
-    site_names = get_site_names()
-    selected = st.selectbox(
-        "サイト名",
-        options=site_names,
-        index=0,
-        help="登録済みのサイトから選択すると、対応するURLで取得します。",
-    )
-    target_url = get_url_by_site_name(selected)
+    search_query = st.text_input("キーワードで検索（候補を表示）", key="site_search_q", placeholder="例: 配当利回り ランキング")
+    if st.button("検索", key="site_search_btn"):
+        if search_query and search_query.strip():
+            candidates = search_site_candidates(search_query.strip(), max_results=15)
+            st.session_state["site_search_results"] = candidates
+            st.rerun()
+        else:
+            st.warning("キーワードを入力してください。")
+    search_results = st.session_state.get("site_search_results") or []
+    combined = [(label, url) for label, url in search_results] + list(NAMED_SITES)
+    if combined:
+        idx = st.selectbox(
+            "サイト候補（検索結果＋登録済み）",
+            range(len(combined)),
+            format_func=lambda i: combined[i][0],
+            key="site_candidate_select",
+        )
+        target_url = combined[idx][1]
+    else:
+        selected = st.selectbox("サイト名", options=get_site_names(), index=0, key="site_fallback")
+        target_url = get_url_by_site_name(selected)
 else:
     url = st.text_input(
         "ランキングURL（未入力の場合はデフォルトを使用）",
