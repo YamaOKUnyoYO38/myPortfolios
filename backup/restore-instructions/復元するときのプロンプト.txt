@@ -1,0 +1,48 @@
+================================================================================
+High-Dividend Hunter バックアップ復元手順
+================================================================================
+
+【復元の考え方】
+バックアップフォルダ（例: initial-release）の内容をプロジェクトルートに
+上書きコピーすると、その時点の状態に戻せます。
+
+  コピー元: backup\<バックアップ名>\   →  コピー先: プロジェクトルート
+  - src\*       →  src\
+  - requirements.txt  →  ルート
+  - Dockerfile  →  ルート
+
+--------------------------------------------------------------------------------
+■ Windows (PowerShell) — プロジェクトルートで実行
+--------------------------------------------------------------------------------
+
+# initial-release を復元する場合
+Copy-Item -Path backup\initial-release\src\* -Destination src\ -Recurse -Force
+Copy-Item -Path backup\initial-release\requirements.txt -Destination . -Force
+Copy-Item -Path backup\initial-release\Dockerfile -Destination . -Force
+
+# 別のバックアップ（例: 20250204-baseline）を復元する場合
+# Copy-Item -Path backup\20250204-baseline\src\* -Destination src\ -Recurse -Force
+# Copy-Item -Path backup\20250204-baseline\requirements.txt -Destination . -Force
+# Copy-Item -Path backup\20250204-baseline\Dockerfile -Destination . -Force
+
+--------------------------------------------------------------------------------
+■ Mac / Linux (bash) — プロジェクトルートで実行
+--------------------------------------------------------------------------------
+
+# initial-release を復元する場合
+cp -r backup/initial-release/src/* src/
+cp backup/initial-release/requirements.txt .
+cp backup/initial-release/Dockerfile .
+
+# 別のバックアップを復元する場合
+# cp -r backup/20250204-baseline/src/* src/
+# cp backup/20250204-baseline/requirements.txt .
+# cp backup/20250204-baseline/Dockerfile .
+
+--------------------------------------------------------------------------------
+■ 復元後の確認
+--------------------------------------------------------------------------------
+- ローカル: streamlit run src/app.py
+- Render に反映するには、上書き後に git add / commit / push してください。
+
+================================================================================
