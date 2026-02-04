@@ -4,6 +4,9 @@ High-Dividend Hunter: Streamlit Web UI
 import streamlit as st
 from main import hunt_high_dividend, DEFAULT_URL
 
+RESULT_LIMIT_MIN, RESULT_LIMIT_MAX = 1, 999
+DEFAULT_LIMIT = 50
+
 st.set_page_config(
     page_title="High-Dividend Hunter",
     page_icon="📈",
@@ -20,9 +23,18 @@ url = st.text_input(
 )
 target_url = url.strip() or None
 
+limit = st.number_input(
+    "取得件数",
+    min_value=RESULT_LIMIT_MIN,
+    max_value=RESULT_LIMIT_MAX,
+    value=DEFAULT_LIMIT,
+    step=1,
+    help=f"{RESULT_LIMIT_MIN}〜{RESULT_LIMIT_MAX}件の範囲で指定してください。",
+)
+
 if st.button("ランキングを取得", type="primary"):
     with st.spinner("取得中… (マナーで1秒以上待機しています)"):
-        df = hunt_high_dividend(url=target_url)
+        df = hunt_high_dividend(url=target_url, limit=limit)
 
     if df is not None and not df.empty:
         st.success(f"取得件数: {len(df)} 件")

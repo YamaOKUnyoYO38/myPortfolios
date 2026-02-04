@@ -82,43 +82,78 @@ def _parse_table_rows(table, header_texts: list) -> list[dict]:
     return rows_data
 
 
-def hunt_high_dividend(url: str | None = None) -> pd.DataFrame:
+def _fetch_one_page(url: str) -> pd.DataFrame | tuple[list[dict], list[str]] | None:
+    """1ページ分を取得。成功時は (rows, header_texts)、テーブルなし時は None。"""
+    try:
+        soup = _get_soup(url)
+        table, header_texts = _find_ranking_table(soup)
+        if table is None or not header_texts:
+            return None
+        rows = _parse_table_rows(table, header_texts)
+        if not rows:
+            return None
+        return rows, header_texts
+    except requests.RequestException:
+        return None
+    except Exception:
+        return None
+
+
+def _url_append_page(base_url: str, page: int) -> str:
+    """URL に page パラメータを付与（既存クエリには & で追加）。"""
+    if "?" in base_url:
+        return f"{base_url}&page={page}"
+    return f"{base_url}?page={page}"
+
+
+def hunt_high_dividend(url: str | None = None, limit: int | None = None) -> pd.DataFrame:
     """
     指定されたYahoo!ファイナンスの配当利回りランキングURLからデータを取得し、
     DataFrameを返す。
 
     Args:
         url: 取得先URL。Noneの場合はDEFAULT_URLを使用し、失敗時はFALLBACK_URLを試行。
+        limit: 取得件数（1〜999）。None の場合は1ページ分（最大50件程度）のみ取得。
 
     Returns:
         ランキングデータのDataFrame。取得失敗時は空のDataFrameを返す。
     """
+    if limit is not None and (limit < 1 or limit > 999):
+        return pd.DataFrame()
+
     target_url = url or DEFAULT_URL
     urls_to_try = [target_url]
     if target_url == DEFAULT_URL:
         urls_to_try.append(FALLBACK_URL)
 
-    for u in urls_to_try:
-        try:
-            soup = _get_soup(u)
-            table, header_texts = _find_ranking_table(soup)
-            if table is None or not header_texts:
-                continue
-            rows = _parse_table_rows(table, header_texts)
+    all_rows: list[dict] = []
+    header_texts: list[str] = []
+    max_rows = limit if limit is not None else 50
+    page = 1
+
+    for base_url in urls_to_try:
+        all_rows = []
+        header_texts = []
+        page = 1
+        while len(all_rows) < max_rows:
+            page_url = _url_append_page(base_url, page) if page > 1 else base_url
+            result = _fetch_one_page(page_url)
+            if result is None:
+                break
+            rows, header_texts = result
             if not rows:
-                continue
-            df = pd.DataFrame(rows)
+                break
+            all_rows.extend(rows)
+            if len(rows) < 50:
+                break
+            if limit is not None and len(all_rows) >= limit:
+                break
+            page += 1
+        if all_rows and header_texts:
+            df = pd.DataFrame(all_rows)
+            if limit is not None:
+                df = df.head(limit)
             return df
-        except requests.RequestException as e:
-            # 次のURLを試すか、最後なら空のDataFrameを返す
-            if u == urls_to_try[-1]:
-                return pd.DataFrame()
-            time.sleep(1)
-            continue
-        except Exception:
-            if u == urls_to_try[-1]:
-                return pd.DataFrame()
-            time.sleep(1)
-            continue
+        time.sleep(1)
 
     return pd.DataFrame()
