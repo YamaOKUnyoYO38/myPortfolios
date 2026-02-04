@@ -339,24 +339,35 @@ if df is not None and not df.empty:
 
                 st.write("**ポートフォリオに追加**")
                 portfolios = load_portfolios()
-                if not portfolios:
-                    st.caption("リストがありません。")
-                    with st.form("option_new_portfolio"):
-                        pname = st.text_input("ポートフォリオ名", key="opt_new_name")
-                        if st.form_submit_button("新規作成"):
-                            if pname and pname.strip():
-                                create_portfolio(pname.strip())
-                                add_symbol_to_portfolio(load_portfolios()[-1]["id"], symbol_value)
-                                st.success(f"「{pname.strip()}」を作成し、銘柄を追加しました。")
-                                st.session_state["option_row_index"] = None
-                                st.rerun()
+
+                # 新規リストをその場で作成（ページ遷移なし）
+                with st.form("option_new_list_form"):
+                    new_name = st.text_input("新規リスト名（任意）", key="opt_new_name", placeholder="入力して「作成して追加」で新規リストに追加")
+                    if st.form_submit_button("作成して追加"):
+                        if new_name and new_name.strip() and symbol_value:
+                            p = create_portfolio(new_name.strip())
+                            add_symbol_to_portfolio(p["id"], symbol_value)
+                            st.success(f"「{new_name.strip()}」を作成し、銘柄を追加しました。リストを更新しました。")
+                            st.rerun()
+                        elif not (new_name and new_name.strip()):
+                            st.warning("ポートフォリオ名を入力してください。")
+
+                # 既存リストから選択して追加（フォームで送信して確実に反映）
+                if portfolios:
+                    st.caption("既存のリストに追加する場合")
+                    with st.form("option_add_to_existing"):
+                        chosen = st.selectbox(
+                            "追加先",
+                            [p["id"] for p in portfolios],
+                            format_func=lambda pid: next((p["name"] for p in portfolios if p["id"] == pid), pid),
+                            key="opt_add_select",
+                        )
+                        if st.form_submit_button("追加") and symbol_value:
+                            add_symbol_to_portfolio(chosen, symbol_value)
+                            st.success("ポートフォリオに追加しました。")
+                            st.rerun()
                 else:
-                    chosen = st.selectbox("追加先", [p["id"] for p in portfolios], format_func=lambda pid: next((p["name"] for p in portfolios if p["id"] == pid), pid), key="opt_add_select")
-                    if st.button("追加", key="opt_add_btn") and symbol_value:
-                        add_symbol_to_portfolio(chosen, symbol_value)
-                        st.success("ポートフォリオに追加しました。")
-                        st.session_state["option_row_index"] = None
-                        st.rerun()
+                    st.caption("上で新規作成すると、ここにリストが表示されます。")
 
                 st.write("**ソート**")
                 sort_options = [
