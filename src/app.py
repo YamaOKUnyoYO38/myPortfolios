@@ -9,7 +9,13 @@ from main import (
     get_url_by_site_name,
     apply_ranking_filters,
 )
-from portfolio_data import load_portfolios, save_portfolios, create_portfolio, update_portfolio, delete_portfolio
+from portfolio_data import (
+    load_portfolios,
+    create_portfolio,
+    update_portfolio,
+    delete_portfolio,
+    add_symbol_to_portfolio,
+)
 
 RESULT_LIMIT_MIN, RESULT_LIMIT_MAX = 1, 999
 DEFAULT_LIMIT = 50
@@ -156,6 +162,38 @@ if df is not None and not df.empty:
     )
     st.caption(f"絞り込み後: {len(display_df)} 件")
     st.dataframe(display_df, use_container_width=True, hide_index=True)
+
+    # 銘柄をクリックしてポートフォリオに追加（リストに保存）
+    if "symbol" in display_df.columns:
+        st.divider()
+        st.subheader("リストに保存")
+        symbol_options = [
+            (row["symbol"], f"{row.get('順位', '')} - {str(row.get('名称・コード・市場', ''))[:40]} ({row['symbol']})")
+            for _, row in display_df.iterrows()
+            if row.get("symbol")
+        ]
+        if symbol_options and load_portfolios():
+            chosen_symbol = st.selectbox(
+                "銘柄を選択",
+                options=[s for s, _ in symbol_options],
+                format_func=lambda x: next((l for s, l in symbol_options if s == x), x),
+                key="add_symbol_select",
+            )
+            portfolios = load_portfolios()
+            chosen_portfolio = st.selectbox(
+                "追加先ポートフォリオ",
+                options=[p["id"] for p in portfolios],
+                format_func=lambda pid: next((p["name"] for p in portfolios if p["id"] == pid), pid),
+                key="add_portfolio_select",
+            )
+            if st.button("ポートフォリオに追加", key="add_to_portfolio_btn"):
+                if chosen_symbol and chosen_portfolio:
+                    add_symbol_to_portfolio(chosen_portfolio, chosen_symbol)
+                    st.success(f"銘柄 {chosen_symbol} をリストに追加しました。")
+        elif symbol_options:
+            st.caption("ポートフォリオを作成すると、ここから銘柄を追加できます。")
+        else:
+            st.caption("取得データに銘柄コードが含まれる場合、ここからリストに保存できます。")
 
     csv = display_df.to_csv(index=False, encoding="utf-8-sig")
     st.download_button(

@@ -100,6 +100,13 @@ def _parse_table_rows(table, header_texts: list) -> list[dict]:
         # 余った列は col_N で追加
         for i in range(n, len(cell_texts)):
             row_dict[f"col_{i}"] = cell_texts[i]
+        # 銘柄コード: 先頭セル内の quote/XXXX リンクから取得（ポートフォリオ追加用）
+        symbol = ""
+        if cells:
+            a = cells[0].find("a", href=True)
+            if a and "quote/" in a["href"]:
+                symbol = a["href"].rstrip("/").split("quote/")[-1].split("?")[0] or ""
+        row_dict["symbol"] = symbol
         rows_data.append(row_dict)
     return rows_data
 
