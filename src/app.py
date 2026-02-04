@@ -293,8 +293,93 @@ if df is not None and not df.empty:
         sector=sector or None,
         has_shareholder_benefit=has_benefit,
     )
+    # 修正7: オプションでソート
+    sort_spec = st.session_state.get("ranking_sort")
+    if sort_spec:
+        col_name, ascending = sort_spec
+        if col_name in display_df.columns:
+            try:
+                display_df = display_df.sort_values(by=col_name, ascending=ascending, na_position="last")
+            except Exception:
+                pass
+
+    # 修正6: Symbol → オプション（表示用に列名変更。内部で symbol 参照するためコピーでリネーム）
+    has_symbol_col = "symbol" in display_df.columns
+    if has_symbol_col:
+        display_df = display_df.rename(columns={"symbol": "オプション"})
+
     st.caption(f"絞り込み後: {len(display_df)} 件")
     st.dataframe(display_df, use_container_width=True, hide_index=True)
+
+    # オプション: 行を選択してポートフォリオに追加 or ソート
+    if "オプション" in display_df.columns:
+        st.write("**オプション**（行を選択して「オプションを開く」でポートフォリオに追加またはソート）")
+        row_options = list(display_df.index)
+        row_labels = [
+            f"{display_df.loc[i].get('順位', '')} - {str(display_df.loc[i].get('名称・コード・市場', ''))[:35]}"
+            for i in row_options
+        ]
+        def _row_label(i):
+            if i in row_options:
+                return row_labels[row_options.index(i)]
+            return str(i)
+        row_sel = st.selectbox("行を選択", row_options, format_func=_row_label, key="option_row_sel")
+        open_opt = st.button("オプションを開く", key="open_option_btn")
+        if open_opt:
+            st.session_state["option_row_index"] = row_sel
+            st.rerun()
+
+    if st.session_state.get("option_row_index") is not None and "オプション" in display_df.columns:
+        row_idx = st.session_state["option_row_index"]
+        if row_idx in display_df.index:
+            with st.expander("オプション", expanded=True):
+                symbol_value = display_df.loc[row_idx].get("オプション", "")
+                sel_label = row_labels[row_options.index(row_idx)] if row_idx in row_options else str(row_idx)
+                st.write(f"選択行: {sel_label}")
+
+                st.write("**ポートフォリオに追加**")
+                portfolios = load_portfolios()
+                if not portfolios:
+                    st.caption("リストがありません。")
+                    with st.form("option_new_portfolio"):
+                        pname = st.text_input("ポートフォリオ名", key="opt_new_name")
+                        if st.form_submit_button("新規作成"):
+                            if pname and pname.strip():
+                                create_portfolio(pname.strip())
+                                add_symbol_to_portfolio(load_portfolios()[-1]["id"], symbol_value)
+                                st.success(f"「{pname.strip()}」を作成し、銘柄を追加しました。")
+                                st.session_state["option_row_index"] = None
+                                st.rerun()
+                else:
+                    chosen = st.selectbox("追加先", [p["id"] for p in portfolios], format_func=lambda pid: next((p["name"] for p in portfolios if p["id"] == pid), pid), key="opt_add_select")
+                    if st.button("追加", key="opt_add_btn") and symbol_value:
+                        add_symbol_to_portfolio(chosen, symbol_value)
+                        st.success("ポートフォリオに追加しました。")
+                        st.session_state["option_row_index"] = None
+                        st.rerun()
+
+                st.write("**ソート**")
+                sort_options = [
+                    ("順位（昇順）", "順位", True),
+                    ("順位（降順）", "順位", False),
+                    ("名称あいうえお（昇順）", "名称・コード・市場", True),
+                    ("名称あいうえお（降順）", "名称・コード・市場", False),
+                    ("1株配当（昇順）", "1株配当", True),
+                    ("1株配当（降順）", "1株配当", False),
+                    ("取引値（昇順）", "取引値", True),
+                    ("取引値（降順）", "取引値", False),
+                ]
+                sort_cols = [c for c in display_df.columns if c != "オプション"]
+                available = [(lbl, col, asc) for lbl, col, asc in sort_options if col in sort_cols]
+                if available:
+                    sort_choice = st.selectbox("並び替え条件", range(len(available)), format_func=lambda i: available[i][0], key="sort_choice")
+                    if st.button("ソートを適用", key="sort_apply_btn"):
+                        st.session_state["ranking_sort"] = (available[sort_choice][1], available[sort_choice][2])
+                        st.session_state["option_row_index"] = None
+                        st.rerun()
+                if st.button("オプションを閉じる", key="close_option_btn"):
+                    st.session_state["option_row_index"] = None
+                    st.rerun()
 
     csv = display_df.to_csv(index=False, encoding="utf-8-sig")
     st.download_button(
