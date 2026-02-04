@@ -15,6 +15,7 @@ from portfolio_data import (
     update_portfolio,
     delete_portfolio,
     add_symbol_to_portfolio,
+    increment_view_count,
 )
 
 RESULT_LIMIT_MIN, RESULT_LIMIT_MAX = 1, 999
@@ -79,7 +80,74 @@ if st.session_state["main_page"] == "portfolio_create":
     st.stop()
 
 if st.session_state["main_page"] == "my_portfolio":
-    st.caption("My Portfolio：新規作成またはポートフォリオを参照できます。")
+    if "view_portfolio_id" not in st.session_state:
+        st.session_state["view_portfolio_id"] = None
+    view_pid = st.session_state.get("view_portfolio_id")
+
+    if view_pid:
+        # 専用閲覧用ページ: 選択したポートフォリオの銘柄リスト（閲覧回数は遷移時1回のみ加算）
+        if st.session_state.get("view_count_incremented_for") != view_pid:
+            increment_view_count(view_pid)
+            st.session_state["view_count_incremented_for"] = view_pid
+        portfolios = load_portfolios()
+        current = next((p for p in portfolios if p.get("id") == view_pid), None)
+        if current:
+            if st.button("← 一覧に戻る"):
+                st.session_state["view_portfolio_id"] = None
+                st.session_state.pop("view_count_incremented_for", None)
+                st.rerun()
+            st.subheader(current.get("name", ""))
+            symbols = current.get("symbols") or []
+            if symbols:
+                for i, s in enumerate(symbols, 1):
+                    st.write(f"{i}. {s}")
+            else:
+                st.caption("登録銘柄はありません。")
+        else:
+            st.session_state["view_portfolio_id"] = None
+            st.rerun()
+        st.stop()
+
+    # My Portfolio トップ: 左上にメニュー（新規作成 / ポートフォリオを参照）
+    st.caption("My Portfolio")
+    col_mp1, col_mp2, _ = st.columns([2, 2, 8])
+    with col_mp1:
+        if st.button("新規作成", key="mp_new"):
+            st.session_state["mp_open_new_dialog"] = True
+            st.rerun()
+    with col_mp2:
+        st.write("**ポートフォリオを参照**（下の一覧から名前をクリック）")
+
+    if st.session_state.get("mp_open_new_dialog"):
+        with st.container():
+            with st.form("my_portfolio_new_form"):
+                new_name = st.text_input("ポートフォリオ名", key="mp_new_name", placeholder="任意の名前を入力")
+                sub_col1, sub_col2, _ = st.columns([1, 1, 4])
+                with sub_col1:
+                    submit = st.form_submit_button("作成")
+                with sub_col2:
+                    cancel = st.form_submit_button("キャンセル")
+                if submit and new_name and new_name.strip():
+                    create_portfolio(new_name.strip())
+                    st.session_state["mp_open_new_dialog"] = False
+                    st.success(f"「{new_name.strip()}」を作成しました。")
+                    st.rerun()
+                if cancel:
+                    st.session_state["mp_open_new_dialog"] = False
+                    st.rerun()
+
+    portfolios = load_portfolios()
+    st.write("---")
+    st.write("**作成済みポートフォリオ**")
+    for p in portfolios:
+        name = p.get("name", "")
+        pid = p.get("id", "")
+        n = len(p.get("symbols") or [])
+        if st.button(f"📁 {name}（{n} 件）", key=f"view_{pid}", use_container_width=True):
+            st.session_state["view_portfolio_id"] = pid
+            st.rerun()
+    if not portfolios:
+        st.caption("ポートフォリオがありません。「新規作成」で作成してください。")
     st.stop()
 
 # ランキングを取得ページ
@@ -178,38 +246,6 @@ if df is not None and not df.empty:
     )
     st.caption(f"絞り込み後: {len(display_df)} 件")
     st.dataframe(display_df, use_container_width=True, hide_index=True)
-
-    # 銘柄をクリックしてポートフォリオに追加（リストに保存）
-    if "symbol" in display_df.columns:
-        st.divider()
-        st.subheader("リストに保存")
-        symbol_options = [
-            (row["symbol"], f"{row.get('順位', '')} - {str(row.get('名称・コード・市場', ''))[:40]} ({row['symbol']})")
-            for _, row in display_df.iterrows()
-            if row.get("symbol")
-        ]
-        if symbol_options and load_portfolios():
-            chosen_symbol = st.selectbox(
-                "銘柄を選択",
-                options=[s for s, _ in symbol_options],
-                format_func=lambda x: next((l for s, l in symbol_options if s == x), x),
-                key="add_symbol_select",
-            )
-            portfolios = load_portfolios()
-            chosen_portfolio = st.selectbox(
-                "追加先ポートフォリオ",
-                options=[p["id"] for p in portfolios],
-                format_func=lambda pid: next((p["name"] for p in portfolios if p["id"] == pid), pid),
-                key="add_portfolio_select",
-            )
-            if st.button("ポートフォリオに追加", key="add_to_portfolio_btn"):
-                if chosen_symbol and chosen_portfolio:
-                    add_symbol_to_portfolio(chosen_portfolio, chosen_symbol)
-                    st.success(f"銘柄 {chosen_symbol} をリストに追加しました。")
-        elif symbol_options:
-            st.caption("ポートフォリオを作成すると、ここから銘柄を追加できます。")
-        else:
-            st.caption("取得データに銘柄コードが含まれる場合、ここからリストに保存できます。")
 
     csv = display_df.to_csv(index=False, encoding="utf-8-sig")
     st.download_button(
