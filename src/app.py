@@ -66,16 +66,23 @@ if st.session_state["main_page"] == "portfolio_create":
     for p in portfolios:
         pid, name, symbols = p.get("id"), p.get("name", ""), p.get("symbols") or []
         with st.expander(f"📁 {name}（{len(symbols)} 件）", expanded=False):
-            edited = st.text_input("リスト名を編集", value=name, key=f"edit_{pid}")
-            col1, col2, _ = st.columns([1, 1, 2])
-            with col1:
-                if st.button("保存", key=f"save_{pid}"):
-                    update_portfolio(pid, name=edited)
-                    st.rerun()
-            with col2:
-                if st.button("削除", key=f"del_{pid}"):
-                    delete_portfolio(pid)
-                    st.rerun()
+            with st.form(f"edit_form_{pid}"):
+                edited = st.text_input("リスト名を編集", value=name, key=f"edit_{pid}")
+                col1, col2, _ = st.columns([1, 1, 2])
+                with col1:
+                    save_clicked = st.form_submit_button("保存")
+                with col2:
+                    pass  # 削除はフォーム外で
+                if save_clicked:
+                    if edited and edited.strip():
+                        update_portfolio(pid, name=edited.strip())
+                        st.success("リスト名を保存しました。")
+                        st.rerun()
+                    else:
+                        st.error("リスト名を入力してください。")
+            if st.button("削除", key=f"del_{pid}"):
+                delete_portfolio(pid)
+                st.rerun()
             if symbols:
                 st.write("登録銘柄:", ", ".join(symbols))
             else:
