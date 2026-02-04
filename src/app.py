@@ -213,25 +213,38 @@ if input_mode == "サイト名で選ぶ":
                     include_english=True,
                 )
             st.session_state["site_search_results"] = candidates
+            st.session_state["site_search_has_keyword"] = True
             if not candidates:
                 st.warning("該当する候補が見つかりませんでした。キーワードを変えて再検索してください。")
             else:
                 st.success(f"{len(candidates)} 件の候補を表示します。")
             st.rerun()
         else:
-            st.warning("キーワードを入力してください。")
+            # キーワード空欄で検索した場合は検索結果をクリアし、登録済み（Yahoo!等）表示に戻す
+            st.session_state["site_search_results"] = []
+            st.session_state["site_search_has_keyword"] = False
+            st.rerun()
     search_results = st.session_state.get("site_search_results") or []
-    combined = [(label, url) for label, url in search_results] + list(NAMED_SITES)
-    if combined:
+    has_search_keyword = st.session_state.get("site_search_has_keyword", False)
+    # キーワード入力あり＋検索結果あり → 検索結果のみ表示（登録済みはフェードアウト）
+    if has_search_keyword and search_results:
         idx = st.selectbox(
-            "サイト候補（検索結果＋登録済み）",
-            range(len(combined)),
-            format_func=lambda i: combined[i][0],
+            "サイト候補（検索結果）",
+            range(len(search_results)),
+            format_func=lambda i: search_results[i][0],
             key="site_candidate_select",
         )
-        target_url = combined[idx][1]
+        target_url = search_results[idx][1]
+        st.caption("キーワードで検索した結果のみ表示しています。登録済みサイトは表示していません。")
     else:
-        selected = st.selectbox("サイト名", options=get_site_names(), index=0, key="site_fallback")
+        # キーワード空欄または未検索 → デフォルトで登録済み（Yahoo!ファイナンス等）のみ表示
+        selected = st.selectbox(
+            "サイト候補（登録済み）",
+            options=get_site_names(),
+            index=0,
+            key="site_fallback",
+            help="キーワードを入力して「検索」を押すと、検索結果がサイト候補に表示されます。",
+        )
         target_url = get_url_by_site_name(selected)
 else:
     url = st.text_input(
