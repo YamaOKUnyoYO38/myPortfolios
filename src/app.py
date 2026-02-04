@@ -217,14 +217,23 @@ else:
     )
     target_url = url.strip() or None
 
-limit = st.number_input(
-    "取得件数",
-    min_value=RESULT_LIMIT_MIN,
-    max_value=RESULT_LIMIT_MAX,
-    value=DEFAULT_LIMIT,
-    step=1,
-    help=f"{RESULT_LIMIT_MIN}〜{RESULT_LIMIT_MAX}件の範囲で指定してください。",
+fetch_all_pages = st.checkbox(
+    "公開されている全ページを取得する（ページネーションで最大999件）",
+    value=False,
+    key="fetch_all_pages",
 )
+if fetch_all_pages:
+    limit = RESULT_LIMIT_MAX
+    st.caption(f"取得件数: {limit} 件（全ページから取得）")
+else:
+    limit = st.number_input(
+        "取得件数",
+        min_value=RESULT_LIMIT_MIN,
+        max_value=RESULT_LIMIT_MAX,
+        value=DEFAULT_LIMIT,
+        step=1,
+        help=f"{RESULT_LIMIT_MIN}〜{RESULT_LIMIT_MAX}件の範囲で指定してください。",
+    )
 
 if st.button("ランキングを取得", type="primary"):
     with st.spinner("取得中… (マナーで1秒以上待機しています)"):
