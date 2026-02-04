@@ -189,11 +189,27 @@ input_mode = st.radio(
 
 target_url = None
 if input_mode == "サイト名で選ぶ":
-    search_query = st.text_input("キーワードで検索（候補を表示）", key="site_search_q", placeholder="例: 配当利回り ランキング")
-    if st.button("検索", key="site_search_btn"):
+    with st.form("site_search_form"):
+        search_query = st.text_input(
+            "キーワードで検索（候補を表示）",
+            key="site_search_q",
+            placeholder="例: 配当利回り ランキング / dividend yield ranking",
+        )
+        st.caption("WWWを網羅的に検索します（日本語・英語のサイト・文献を含みます）。")
+        submitted = st.form_submit_button("検索")
+    if submitted:
         if search_query and search_query.strip():
-            candidates = search_site_candidates(search_query.strip(), max_results=15)
+            with st.spinner("検索中…（複数クエリで英語サイトも含めて検索しています）"):
+                candidates = search_site_candidates(
+                    search_query.strip(),
+                    max_results=20,
+                    include_english=True,
+                )
             st.session_state["site_search_results"] = candidates
+            if not candidates:
+                st.warning("該当する候補が見つかりませんでした。キーワードを変えて再検索してください。")
+            else:
+                st.success(f"{len(candidates)} 件の候補を表示します。")
             st.rerun()
         else:
             st.warning("キーワードを入力してください。")

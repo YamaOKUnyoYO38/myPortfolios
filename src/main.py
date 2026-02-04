@@ -34,18 +34,52 @@ def get_url_by_site_name(site_name: str) -> str | None:
     return None
 
 
-def search_site_candidates(query: str, max_results: int = 15) -> list[tuple[str, str]]:
-    """入力内容でネット検索し、(タイトル, URL) の候補リストを返す。ヒット範囲拡大用。"""
+def search_site_candidates(query: str, max_results: int = 20, include_english: bool = True) -> list[tuple[str, str]]:
+    """
+    入力キーワードでWWWを網羅的に検索し、(タイトル, URL) の候補を返す。
+    英語サイト・文献も含める場合は複数クエリで検索して結果を統合する。
+    """
     if not query or not query.strip():
         return []
-    try:
-        from duckduckgo_search import DDGS
+    q = query.strip()
+    seen_urls: set[str] = set()
+    out: list[tuple[str, str]] = []
 
-        with DDGS() as ddgs:
-            results = list(ddgs.text(query.strip(), max_results=max_results))
-        return [(r.get("title", ""), r.get("href", "")) for r in results if r.get("href")]
-    except Exception:
-        return []
+    def _run_search(search_term: str, n: int) -> None:
+        nonlocal out, seen_urls
+        try:
+            from duckduckgo_search import DDGS
+
+            with DDGS() as ddgs:
+                results = list(ddgs.text(search_term, max_results=n))
+            for r in results:
+                href = (r.get("href") or "").strip()
+                if not href or href in seen_urls:
+                    continue
+                seen_urls.add(href)
+                title = (r.get("title") or "").strip() or href
+                out.append((title, href))
+        except Exception:
+            pass
+        time.sleep(0.5)
+
+    # 1) 元のキーワードで検索（日本語・多言語）
+    _run_search(q, max_results)
+
+    # 2) 英語サイト・文献を含める: 英語向けクエリを追加
+    if include_english and q:
+        time.sleep(1)
+        en_queries = [
+            f"{q} dividend yield ranking",
+            f"{q} high dividend stocks",
+            f"dividend yield {q}",
+        ]
+        per = max(5, max_results // len(en_queries))
+        for eq in en_queries:
+            _run_search(eq, per)
+            time.sleep(0.5)
+
+    return out
 
 
 HEADERS = {
