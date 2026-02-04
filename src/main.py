@@ -179,3 +179,86 @@ def hunt_high_dividend(url: str | None = None, limit: int | None = None) -> pd.D
         time.sleep(1)
 
     return pd.DataFrame()
+
+
+def _parse_yield_value(s: str) -> float | None:
+    """配当利回りセル（例: '+6.72%'）を数値に変換。失敗時は None。"""
+    if not s or not isinstance(s, str):
+        return None
+    s = s.replace("+", "").replace("%", "").strip()
+    if not s:
+        return None
+    try:
+        return float(s)
+    except ValueError:
+        return None
+
+
+def apply_ranking_filters(
+    df: pd.DataFrame,
+    yield_min: float | None = None,
+    yield_max: float | None = None,
+    settlement_months: list[str] | None = None,
+    industry: list[str] | None = None,
+    sector: list[str] | None = None,
+    has_shareholder_benefit: bool | None = None,
+) -> pd.DataFrame:
+    """
+    取得済みランキング DataFrame に条件をかけて絞り込む。
+
+    Args:
+        df: ランキングデータ
+        yield_min / yield_max: 配当利回り（%）の範囲。None は制限なし。
+        settlement_months: 決算年月で絞り込み（例: ['2026/03', '2025/12']）。None は制限なし。
+        industry / sector / has_shareholder_benefit: 列が存在する場合に適用。現行取得データには含まれない場合あり。
+    """
+    if df.empty:
+        return df
+    out = df.copy()
+
+    # 配当利回り
+    col_yield = None
+    for c in out.columns:
+        if "配当利回り" in str(c):
+            col_yield = c
+            break
+    if col_yield:
+        out["_parsed_yield"] = out[col_yield].astype(str).map(_parse_yield_value)
+        out = out.dropna(subset=["_parsed_yield"])
+        if yield_min is not None:
+            out = out[out["_parsed_yield"] >= yield_min]
+        if yield_max is not None:
+            out = out[out["_parsed_yield"] <= yield_max]
+        out = out.drop(columns=["_parsed_yield"])
+
+    # 決算年月
+    col_settlement = None
+    for c in out.columns:
+        if "決算" in str(c) and "月" in str(c):
+            col_settlement = c
+            break
+    if col_settlement and settlement_months:
+        out = out[out[col_settlement].astype(str).str.strip().isin(settlement_months)]
+
+    # 業界（列がある場合のみ）
+    for c in out.columns:
+        if "業界" in str(c) and industry:
+            out = out[out[c].astype(str).str.strip().isin(industry)]
+            break
+
+    # 分野（列がある場合のみ）
+    for c in out.columns:
+        if "分野" in str(c) and sector:
+            out = out[out[c].astype(str).str.strip().isin(sector)]
+            break
+
+    # 株主優待（列がある場合のみ）
+    for c in out.columns:
+        if "株主優待" in str(c) or "優待" in str(c):
+            if has_shareholder_benefit is True:
+                out = out[out[c].astype(str).str.strip().str.lower().isin(("あり", "1", "true", "yes"))]
+            elif has_shareholder_benefit is False:
+                out = out[~out[c].astype(str).str.strip().str.lower().isin(("あり", "1", "true", "yes"))]
+            break
+
+    return out.reset_index(drop=True)
