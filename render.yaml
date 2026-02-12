@@ -1,0 +1,9 @@
+# Render 用 Blueprint（リポジトリルートに配置）
+# リポジトリ連携後、main への push で自動デプロイされます。
+services:
+  - type: web
+    name: high-dividend-hunter
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: free
