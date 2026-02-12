@@ -84,7 +84,8 @@ if st.session_state["main_page"] == "portfolio_create":
                 delete_portfolio(pid)
                 st.rerun()
             if symbols:
-                st.write("登録銘柄:", ", ".join(symbols))
+                labels = [(s.split("|", 1)[0].strip() or s) if ("|" in s) else s for s in symbols]
+                st.write("登録銘柄:", ", ".join(labels))
             else:
                 st.caption("銘柄はランキング取得ページのオプションから追加できます。")
     st.stop()
@@ -110,7 +111,9 @@ if st.session_state["main_page"] == "my_portfolio":
             symbols = current.get("symbols") or []
             if symbols:
                 for i, s in enumerate(symbols, 1):
-                    st.write(f"{i}. {s}")
+                    # 保存形式 "表示名|銘柄コード" の場合は表示名を、そうでなければそのまま表示
+                    label = (s.split("|", 1)[0].strip() or s) if ("|" in s) else s
+                    st.write(f"{i}. {label}")
             else:
                 st.caption("登録銘柄はありません。")
         else:
@@ -196,6 +199,10 @@ input_mode = st.radio(
 
 target_url = None
 if input_mode == "サイト名で選ぶ":
+    # 検索結果は session_state で保持し、フォーム送信後の rerun でも確実にサイト候補に反映する
+    search_results = st.session_state.get("site_search_results") or []
+    has_search_keyword = st.session_state.get("site_search_has_keyword", False)
+
     with st.form("site_search_form"):
         search_query = st.text_input(
             "キーワードで検索（候補を表示）",
@@ -205,10 +212,12 @@ if input_mode == "サイト名で選ぶ":
         st.caption("WWWを網羅的に検索します（日本語・英語のサイト・文献を含みます）。")
         submitted = st.form_submit_button("検索")
     if submitted:
-        if search_query and search_query.strip():
+        q = (search_query or "").strip()
+        st.session_state["site_search_query"] = q
+        if q:
             with st.spinner("検索中…（複数クエリで英語サイトも含めて検索しています）"):
                 candidates = search_site_candidates(
-                    search_query.strip(),
+                    q,
                     max_results=20,
                     include_english=True,
                 )
@@ -220,18 +229,21 @@ if input_mode == "サイト名で選ぶ":
                 st.success(f"{len(candidates)} 件の候補を表示します。")
             st.rerun()
         else:
-            # キーワード空欄で検索した場合は検索結果をクリアし、登録済み（Yahoo!等）表示に戻す
             st.session_state["site_search_results"] = []
             st.session_state["site_search_has_keyword"] = False
             st.rerun()
-    search_results = st.session_state.get("site_search_results") or []
-    has_search_keyword = st.session_state.get("site_search_has_keyword", False)
-    # キーワード入力あり＋検索結果あり → 検索結果のみ表示（登録済みはフェードアウト）
+
+    # キーワード入力あり＋検索結果あり → 検索結果のみサイト候補に表示（登録済みはフェードアウト）
     if has_search_keyword and search_results:
+        options = list(range(len(search_results)))
+        default_idx = 0
+        if "site_candidate_select" in st.session_state and st.session_state["site_candidate_select"] in options:
+            default_idx = options.index(st.session_state["site_candidate_select"])
         idx = st.selectbox(
             "サイト候補（検索結果）",
-            range(len(search_results)),
-            format_func=lambda i: search_results[i][0],
+            options=options,
+            index=default_idx,
+            format_func=lambda i: search_results[i][0][:80] + ("..." if len(search_results[i][0]) > 80 else ""),
             key="site_candidate_select",
         )
         target_url = search_results[idx][1]
@@ -390,6 +402,9 @@ if df is not None and not df.empty:
         if row_idx in display_df.index:
             with st.expander("オプション", expanded=True):
                 symbol_value = display_df.loc[row_idx].get("オプション", "")
+                # 銘柄名は「名称・コード・市場」列から取得（ポートフォリオ一覧で銘柄名を表示するため）
+                name_col = next((c for c in display_df.columns if "名称" in str(c) and "コード" in str(c)), None)
+                display_name_value = str(display_df.loc[row_idx].get(name_col, "")).strip() if name_col else ""
                 sel_label = row_labels[row_options.index(row_idx)] if row_idx in row_options else str(row_idx)
                 st.write(f"選択行: {sel_label}")
 
@@ -402,11 +417,13 @@ if df is not None and not df.empty:
                     if st.form_submit_button("作成して追加"):
                         if new_name and new_name.strip() and symbol_value:
                             p = create_portfolio(new_name.strip())
-                            add_symbol_to_portfolio(p["id"], symbol_value)
+                            add_symbol_to_portfolio(p["id"], symbol_value, display_name=display_name_value or None)
                             st.success(f"「{new_name.strip()}」を作成し、銘柄を追加しました。リストを更新しました。")
                             st.rerun()
                         elif not (new_name and new_name.strip()):
                             st.warning("ポートフォリオ名を入力してください。")
+                        elif not symbol_value:
+                            st.warning("この行には銘柄コードがありません。別の行を選んでください。")
 
                 # 既存リストから選択して追加（フォームで送信して確実に反映）
                 if portfolios:
@@ -418,10 +435,16 @@ if df is not None and not df.empty:
                             format_func=lambda pid: next((p["name"] for p in portfolios if p["id"] == pid), pid),
                             key="opt_add_select",
                         )
-                        if st.form_submit_button("追加") and symbol_value:
-                            add_symbol_to_portfolio(chosen, symbol_value)
+                        add_clicked = st.form_submit_button("追加")
+                    if add_clicked and symbol_value:
+                        if add_symbol_to_portfolio(chosen, symbol_value, display_name=display_name_value or None):
                             st.success("ポートフォリオに追加しました。")
+                            st.session_state["option_row_index"] = None
                             st.rerun()
+                        else:
+                            st.error("追加に失敗しました。ポートフォリオを確認してください。")
+                    elif add_clicked and not symbol_value:
+                        st.warning("この行には銘柄コードがありません。")
                 else:
                     st.caption("上で新規作成すると、ここにリストが表示されます。")
 
