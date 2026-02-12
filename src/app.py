@@ -1,6 +1,7 @@
 """
 High-Dividend Hunter: Streamlit Web UI
 """
+import re
 import streamlit as st
 from main import (
     hunt_high_dividend,
@@ -199,7 +200,18 @@ input_mode = st.radio(
 
 target_url = None
 if input_mode == "サイト名で選ぶ":
-    # 検索結果は session_state で保持し、フォーム送信後の rerun でも確実にサイト候補に反映する
+    # 項目1: サイト候補（登録済み）— 常に表示
+    selected_reg = st.selectbox(
+        "サイト候補（登録済み）",
+        options=get_site_names(),
+        index=0,
+        key="site_fallback",
+        help="登録済みのYahoo!ファイナンス等から選択します。",
+    )
+    target_url = get_url_by_site_name(selected_reg)
+
+    # 項目2: キーワード検索 ＋ サイト候補（検索結果）— 別項目として下に表示
+    st.caption("キーワードで検索した結果は、下の「サイト候補（検索結果）」に表示されます。")
     search_results = st.session_state.get("site_search_results") or []
     has_search_keyword = st.session_state.get("site_search_has_keyword", False)
 
@@ -233,7 +245,8 @@ if input_mode == "サイト名で選ぶ":
             st.session_state["site_search_has_keyword"] = False
             st.rerun()
 
-    # キーワード入力あり＋検索結果あり → 検索結果のみサイト候補に表示（登録済みはフェードアウト）
+    # 検索結果を表示するための専用欄（常に表示し、検索前は案内文・検索後は候補を表示）
+    st.subheader("検索結果の候補")
     if has_search_keyword and search_results:
         options = list(range(len(search_results)))
         default_idx = 0
@@ -247,17 +260,9 @@ if input_mode == "サイト名で選ぶ":
             key="site_candidate_select",
         )
         target_url = search_results[idx][1]
-        st.caption("キーワードで検索した結果のみ表示しています。登録済みサイトは表示していません。")
+        st.caption("上で選択した検索結果のURLでランキングを取得します。登録済みを使う場合は「サイト候補（登録済み）」を選んで取得してください。")
     else:
-        # キーワード空欄または未検索 → デフォルトで登録済み（Yahoo!ファイナンス等）のみ表示
-        selected = st.selectbox(
-            "サイト候補（登録済み）",
-            options=get_site_names(),
-            index=0,
-            key="site_fallback",
-            help="キーワードを入力して「検索」を押すと、検索結果がサイト候補に表示されます。",
-        )
-        target_url = get_url_by_site_name(selected)
+        st.info("キーワードを入力して「検索」を押すと、ここに検索結果の候補が表示されます。候補から選択すると、そのURLでランキングを取得できます。")
 else:
     url = st.text_input(
         "ランキングURL（未入力の場合はデフォルトを使用）",
@@ -377,16 +382,39 @@ if df is not None and not df.empty:
         display_df = display_df.rename(columns={"symbol": "オプション"})
 
     st.caption(f"絞り込み後: {len(display_df)} 件")
-    st.dataframe(display_df, use_container_width=True, hide_index=True)
+    row_options = list(display_df.index)
+    row_labels = [
+        f"{display_df.loc[i].get('順位', '')} - {str(display_df.loc[i].get('名称・コード・市場', ''))[:35]}"
+        for i in row_options
+    ]
+    # 表の行をクリックするとオプションが開く（Streamlit 1.35+ の selection 利用）
+    _use_row_click = True
+    if "オプション" in display_df.columns and _use_row_click:
+        try:
+            event = st.dataframe(
+                display_df,
+                use_container_width=True,
+                hide_index=True,
+                on_select="rerun",
+                selection_mode="single-row",
+                key="ranking_df_selection",
+            )
+            if event and getattr(event, "selection", None) and getattr(event.selection, "rows", None) and event.selection.rows:
+                sel_idx = event.selection.rows[0]
+                if 0 <= sel_idx < len(row_options):
+                    new_idx = row_options[sel_idx]
+                    # まだオプションを開いていないときだけ開く（連続 rerun を防ぐ）
+                    if st.session_state.get("option_row_index") is None or st.session_state.get("option_row_index") != new_idx:
+                        st.session_state["option_row_index"] = new_idx
+                        st.rerun()
+        except TypeError:
+            _use_row_click = False
+    if not _use_row_click or "オプション" not in display_df.columns:
+        st.dataframe(display_df, use_container_width=True, hide_index=True, key="ranking_df_plain")
 
-    # オプション: 行を選択してポートフォリオに追加 or ソート
-    if "オプション" in display_df.columns:
+    # オプション: 行クリックで開く（上で設定） or 従来の「行を選択」＋「オプションを開く」
+    if "オプション" in display_df.columns and not _use_row_click:
         st.write("**オプション**（行を選択して「オプションを開く」でポートフォリオに追加またはソート）")
-        row_options = list(display_df.index)
-        row_labels = [
-            f"{display_df.loc[i].get('順位', '')} - {str(display_df.loc[i].get('名称・コード・市場', ''))[:35]}"
-            for i in row_options
-        ]
         def _row_label(i):
             if i in row_options:
                 return row_labels[row_options.index(i)]
@@ -396,6 +424,8 @@ if df is not None and not df.empty:
         if open_opt:
             st.session_state["option_row_index"] = row_sel
             st.rerun()
+    elif "オプション" in display_df.columns:
+        st.caption("👆 **上の表の行をクリック**すると、その行のオプション（ポートフォリオへ追加・ソート）が開きます。")
 
     if st.session_state.get("option_row_index") is not None and "オプション" in display_df.columns:
         row_idx = st.session_state["option_row_index"]
@@ -405,25 +435,33 @@ if df is not None and not df.empty:
                 # 銘柄名は「名称・コード・市場」列から取得（ポートフォリオ一覧で銘柄名を表示するため）
                 name_col = next((c for c in display_df.columns if "名称" in str(c) and "コード" in str(c)), None)
                 display_name_value = str(display_df.loc[row_idx].get(name_col, "")).strip() if name_col else ""
+                # 銘柄コードが空でも「名称・コード・市場」から4桁コードを抽出してフォールバック
+                if not (symbol_value and str(symbol_value).strip()) and display_name_value:
+                    m = re.search(r"\b([0-9]{4})\b", display_name_value)
+                    if m:
+                        symbol_value = f"{m.group(1)}.T"
                 sel_label = row_labels[row_options.index(row_idx)] if row_idx in row_options else str(row_idx)
                 st.write(f"選択行: {sel_label}")
 
                 st.write("**ポートフォリオに追加**")
                 portfolios = load_portfolios()
 
+                # 銘柄コードまたは表示名のどちらかがあれば追加可能
+                can_add = (symbol_value and str(symbol_value).strip()) or (display_name_value and display_name_value.strip())
+
                 # 新規リストをその場で作成（ページ遷移なし）
                 with st.form("option_new_list_form"):
                     new_name = st.text_input("新規リスト名（任意）", key="opt_new_name", placeholder="入力して「作成して追加」で新規リストに追加")
                     if st.form_submit_button("作成して追加"):
-                        if new_name and new_name.strip() and symbol_value:
+                        if new_name and new_name.strip() and can_add:
                             p = create_portfolio(new_name.strip())
-                            add_symbol_to_portfolio(p["id"], symbol_value, display_name=display_name_value or None)
+                            add_symbol_to_portfolio(p["id"], symbol_value or "", display_name=display_name_value or None)
                             st.success(f"「{new_name.strip()}」を作成し、銘柄を追加しました。リストを更新しました。")
                             st.rerun()
                         elif not (new_name and new_name.strip()):
                             st.warning("ポートフォリオ名を入力してください。")
-                        elif not symbol_value:
-                            st.warning("この行には銘柄コードがありません。別の行を選んでください。")
+                        elif not can_add:
+                            st.warning("この行には銘柄コードも名称も取得できません。別の行を選んでください。")
 
                 # 既存リストから選択して追加（フォームで送信して確実に反映）
                 if portfolios:
@@ -436,15 +474,15 @@ if df is not None and not df.empty:
                             key="opt_add_select",
                         )
                         add_clicked = st.form_submit_button("追加")
-                    if add_clicked and symbol_value:
-                        if add_symbol_to_portfolio(chosen, symbol_value, display_name=display_name_value or None):
+                    if add_clicked:
+                        if can_add and add_symbol_to_portfolio(chosen, symbol_value or "", display_name=display_name_value or None):
                             st.success("ポートフォリオに追加しました。")
                             st.session_state["option_row_index"] = None
                             st.rerun()
+                        elif not can_add:
+                            st.warning("この行には銘柄コードも名称も取得できません。")
                         else:
                             st.error("追加に失敗しました。ポートフォリオを確認してください。")
-                    elif add_clicked and not symbol_value:
-                        st.warning("この行には銘柄コードがありません。")
                 else:
                     st.caption("上で新規作成すると、ここにリストが表示されます。")
 

@@ -121,20 +121,28 @@ def add_symbol_to_portfolio(
     display_name: str | None = None,
     file_path: Path | str | None = None,
 ) -> bool:
-    """ポートフォリオに銘柄を1件追加（重複は追加しない）。display_name がある場合は '表示名|symbol' で保存し一覧で銘柄名を表示する。"""
-    if not (symbol and str(symbol).strip()):
+    """ポートフォリオに銘柄を1件追加（重複は追加しない）。display_name がある場合は '表示名|symbol' で保存し一覧で銘柄名を表示する。symbol が空でも display_name があれば追加可能。"""
+    display_str = (display_name and str(display_name).strip()) or ""
+    symbol_str = (symbol and str(symbol).strip()) or ""
+    if not symbol_str and not display_str:
         return False
-    symbol = str(symbol).strip()
-    entry = f"{display_name.strip()}|{symbol}" if (display_name and str(display_name).strip()) else symbol
+    if symbol_str:
+        entry = f"{display_str}|{symbol_str}" if display_str else symbol_str
+    else:
+        entry = f"{display_str}|"  # 銘柄コードなしで表示名のみ
     portfolios = load_portfolios(file_path)
     for p in portfolios:
         if p.get("id") == portfolio_id:
             syms = p.get("symbols") or []
             existing_codes = {_symbol_from_entry(s) for s in syms}
-            if symbol not in existing_codes:
-                syms.append(entry)
-                p["symbols"] = syms
-                save_portfolios(portfolios, file_path)
+            # 同じ銘柄コード、または表示名のみの場合は同じ entry 文字列で重複判定
+            if symbol_str and symbol_str in existing_codes:
+                return True
+            if not symbol_str and any(s == entry or s.rstrip("|") == display_str for s in syms):
+                return True
+            syms.append(entry)
+            p["symbols"] = syms
+            save_portfolios(portfolios, file_path)
             return True
     return False
 

@@ -156,6 +156,15 @@ def _parse_table_rows(table, header_texts: list) -> list[dict]:
             a = cells[0].find("a", href=True)
             if a and "quote/" in a["href"]:
                 symbol = a["href"].rstrip("/").split("quote/")[-1].split("?")[0] or ""
+        # リンクから取れない場合は「名称・コード・市場」系のセルから4桁コードを抽出（フォールバック）
+        if not symbol and header_texts:
+            for i, h in enumerate(header_texts):
+                if "名称" in (h or "") and "コード" in (h or ""):
+                    cell_val = cell_texts[i] if i < len(cell_texts) else ""
+                    code = _extract_code_from_name_cell(cell_val)
+                    if code:
+                        symbol = f"{code}.T"
+                    break
         row_dict["symbol"] = symbol
         rows_data.append(row_dict)
     return rows_data
@@ -255,6 +264,16 @@ def _parse_yield_value(s: str) -> float | None:
 _MARKET_PATTERN = re.compile(
     r"(東証(?:PRM|STD|グロース)?|名証(?:MN)?|マザーズ|札証|福証|JQS|東証)"
 )
+# 名称・コード・市場セル内の4桁銘柄コード（数字のみ）
+_CODE_PATTERN = re.compile(r"\b([0-9]{4})\b")
+
+
+def _extract_code_from_name_cell(s: str) -> str:
+    """名称・コード・市場セルから4桁の銘柄コードを1つ返す。見つからなければ ''。"""
+    if not s or not isinstance(s, str):
+        return ""
+    m = _CODE_PATTERN.search(s.strip())
+    return m.group(1) if m else ""
 
 
 def _extract_market_from_name_cell(s: str) -> str:
