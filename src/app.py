@@ -210,40 +210,50 @@ if input_mode == "サイト名で選ぶ":
     )
     target_url = get_url_by_site_name(selected_reg)
 
-    # 項目2: キーワード検索 ＋ サイト候補（検索結果）— 別項目として下に表示
-    st.caption("キーワードで検索した結果は、下の「サイト候補（検索結果）」に表示されます。")
-    search_results = st.session_state.get("site_search_results") or []
-    has_search_keyword = st.session_state.get("site_search_has_keyword", False)
+    # 項目2: キーワード検索（フォームに頼らず、入力値は session_state で即反映）
+    st.caption("キーワードで検索した結果は、下の「検索結果の候補」に表示されます。")
+    search_query = st.text_input(
+        "キーワードで検索（候補を表示）",
+        key="site_search_q",
+        placeholder="例: 配当利回り ランキング / dividend yield ranking",
+    )
+    st.caption("WWWを網羅的に検索します（日本語・英語のサイト・文献を含みます）。")
 
-    with st.form("site_search_form"):
-        search_query = st.text_input(
-            "キーワードで検索（候補を表示）",
-            key="site_search_q",
-            placeholder="例: 配当利回り ランキング / dividend yield ranking",
-        )
-        st.caption("WWWを網羅的に検索します（日本語・英語のサイト・文献を含みます）。")
-        submitted = st.form_submit_button("検索")
-    if submitted:
-        q = (search_query or "").strip()
+    search_clicked = st.button("検索", type="primary", key="site_search_btn")
+    if search_clicked:
+        # ボタン押下時は session_state の値を参照（フォーム送信の遅延を避ける）
+        q = (st.session_state.get("site_search_q") or "").strip()
         st.session_state["site_search_query"] = q
         if q:
-            with st.spinner("検索中…（複数クエリで英語サイトも含めて検索しています）"):
-                candidates = search_site_candidates(
-                    q,
-                    max_results=20,
-                    include_english=True,
-                )
-            st.session_state["site_search_results"] = candidates
-            st.session_state["site_search_has_keyword"] = True
-            if not candidates:
-                st.warning("該当する候補が見つかりませんでした。キーワードを変えて再検索してください。")
-            else:
-                st.success(f"{len(candidates)} 件の候補を表示します。")
-            st.rerun()
+            # ロード中は「検索を実行しています」を常に表示（st.status でくるくる表示）
+            with st.status("🔍 検索を実行しています…", expanded=True) as status:
+                st.write("キーワードで検索しています。しばらくお待ちください…")
+                try:
+                    candidates = search_site_candidates(
+                        q,
+                        max_results=20,
+                        include_english=True,
+                    )
+                    st.session_state["site_search_results"] = candidates
+                    st.session_state["site_search_has_keyword"] = True
+                    if not candidates:
+                        status.update(label="候補が見つかりませんでした", state="complete")
+                        st.warning("該当する候補が見つかりませんでした。キーワードを変えて再検索してください。")
+                    else:
+                        status.update(label=f"完了（{len(candidates)} 件）", state="complete")
+                        st.success(f"{len(candidates)} 件の候補を取得しました。")
+                    st.rerun()
+                except Exception as e:
+                    status.update(label="検索エラー", state="error")
+                    st.error(f"検索中にエラーが発生しました: {e}")
         else:
             st.session_state["site_search_results"] = []
             st.session_state["site_search_has_keyword"] = False
+            st.warning("キーワードを入力してください。")
             st.rerun()
+
+    search_results = st.session_state.get("site_search_results") or []
+    has_search_keyword = st.session_state.get("site_search_has_keyword", False)
 
     # 検索結果を表示するための専用欄（常に表示し、検索前は案内文・検索後は候補を表示）
     st.subheader("検索結果の候補")
